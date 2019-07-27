@@ -183,7 +183,7 @@ def get_login():
 def post_login():
     name = request.form['name']
     cur = dbh().cursor()
-    cur.execute("SELECT * FROM user WHERE name = %s", (name, ))
+    cur.execute("SELECT id, salt, password FROM user WHERE name = %s LIMIT 1", (name, ))
     row = cur.fetchone()
     if row == None or row['password'] != hashlib.sha1((row['salt'] + request.form['password']).encode('utf-8')).hexdigest():
         abort(403)
@@ -220,7 +220,7 @@ def delete_keyword(keyword):
         abort(400)
 
     cur = dbh().cursor()
-    cur.execute('SELECT * FROM entry WHERE keyword = %s', (keyword, ))
+    cur.execute('SELECT id FROM entry WHERE keyword = %s LIMIT 1', (keyword, ))
     row = cur.fetchone()
     if row == None:
         abort(404)
