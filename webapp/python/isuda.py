@@ -15,8 +15,7 @@ import newrelic.agent
 
 newrelic.agent.initialize('/home/isucon/webapp/python/newrelic.ini')
 
-static_folder = pathlib.Path(__file__).resolve().parent.parent / 'public'
-app = Flask(__name__, static_folder = str(static_folder), static_url_path='')
+app = Flask(__name__)
 
 app.secret_key = 'tonymoris'
 
