@@ -105,7 +105,7 @@ def get_index():
     cur.execute('SELECT description, keyword FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
     entries = cur.fetchall()
 
-    cur.execute('SELECT keyword FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+    cur.execute('SELECT keyword FROM entry ORDER BY keyword_length DESC')
     keywords = cur.fetchall()
 
     stars_dict = load_stars_dict([e['keyword'] for e in entries])
@@ -235,7 +235,7 @@ def htmlify(content, keywords=[]):
 
     if not keywords:
         cur = dbh().cursor()
-        cur.execute('SELECT keyword FROM entry ORDER BY CHARACTER_LENGTH(keyword) DESC')
+        cur.execute('SELECT keyword FROM entry ORDER BY keyword_length DESC')
         keywords = cur.fetchall()
 
     keyword_re = re.compile("(%s)" % '|'.join([ re.escape(k['keyword']) for k in keywords]))
@@ -247,11 +247,15 @@ def htmlify(content, keywords=[]):
     result = re.sub(keyword_re, replace_keyword, content)
     result = html.escape(result)
     for kw, hash in kw2sha.items():
-        url = url_for('get_keyword', keyword = kw)
-        link = "<a href=\"%s\">%s</a>" % (url, html.escape(kw))
-        result = re.sub(re.compile(hash), link, result)
+        result = re.sub(re.compile(hash), kw2link(kw), result)
 
     return re.sub(re.compile("\n"), "<br />", result)
+
+
+def kw2link(keyword):
+    url = url_for('get_keyword', keyword=keyword)
+    link = "<a href=\"%s\">%s</a>" % (url, html.escape(keyword))
+    return link
 
 
 def load_stars(keyword):
