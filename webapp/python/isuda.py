@@ -102,13 +102,15 @@ def get_index():
     page = int(request.args.get('page', '1'))
 
     cur = dbh().cursor()
-    cur.execute('SELECT * FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
+    cur.execute('SELECT description, keyword FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
     entries = cur.fetchall()
+
+    stars_dict = load_stars_dict([e['keyword'] for e in entries])
     for entry in entries:
         entry['html'] = htmlify(entry['description'])
-        entry['stars'] = load_stars(entry['keyword'])
+        entry['stars'] = stars_dict[entry['keyword']]
 
-    cur.execute('SELECT COUNT(*) AS count FROM entry')
+    cur.execute('SELECT COUNT(id) AS count FROM entry')
     row = cur.fetchone()
     total_entries = row['count']
     last_page = int(math.ceil(total_entries / PER_PAGE))
@@ -198,7 +200,7 @@ def get_keyword(keyword):
         abort(400)
 
     cur = dbh().cursor()
-    cur.execute('SELECT * FROM entry WHERE keyword = %s', (keyword,))
+    cur.execute('SELECT * FROM entry WHERE keyword = %s LIMIT 1', (keyword,))
     entry = cur.fetchone()
     if entry == None:
         abort(404)
@@ -246,10 +248,22 @@ def htmlify(content):
 
     return re.sub(re.compile("\n"), "<br />", result)
 
+
 def load_stars(keyword):
     cur = dbh().cursor()
-    cur.execute('SELECT * FROM star WHERE keyword = %s', (keyword,))
+    cur.execute('SELECT user_name FROM star WHERE keyword = %s', (keyword,))
     return cur.fetchall()
+
+
+def load_stars_dict(keywords: list) -> dict:
+    cur = dbh().cursor()
+    cur.execute('SELECT keyword, user_name FROM star WHERE keyword IN (%s)' % ','.join(['%s'] * len(keywords)),
+                tuple(keywords))
+    stars = {keyword: [] for keyword in keywords}
+    for star in cur.fetchall():
+        stars[star['keyword']].append(star)
+
+    return stars
 
 
 @app.route("/stars", methods=['POST'])
