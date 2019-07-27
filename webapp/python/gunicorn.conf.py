@@ -1,7 +1,7 @@
 bind = 'unix:/tmp/gunicorn_isucon.sock'
 backlog = 2048
 
-workers = 10
+workers = 20
 worker_class = 'sync'
 threads = 1500
 worker_connections = 1500
