@@ -25,7 +25,6 @@ _config = {
     'db_port':       int(os.environ.get('ISUDA_DB_PORT', '3306')),
     'db_user':       os.environ.get('ISUDA_DB_USER', 'root'),
     'db_password':   os.environ.get('ISUDA_DB_PASSWORD', ''),
-    'isutar_origin': os.environ.get('ISUTAR_ORIGIN', 'http://localhost:5001'),
     'isupam_origin': os.environ.get('ISUPAM_ORIGIN', 'http://localhost:5050'),
 }
 
@@ -93,8 +92,7 @@ def authenticate(func):
 def get_initialize():
     cur = dbh().cursor()
     cur.execute('DELETE FROM entry WHERE id > 7101')
-    origin = config('isutar_origin')
-    urllib.request.urlopen(origin + '/initialize')
+    cur.execute('TRUNCATE star')
     return jsonify(result = 'ok')
 
 @app.route('/')
@@ -249,12 +247,34 @@ def htmlify(content):
     return re.sub(re.compile("\n"), "<br />", result)
 
 def load_stars(keyword):
-    origin = config('isutar_origin')
-    url = "%s/stars" % origin
-    params = urllib.parse.urlencode({'keyword': keyword})
-    with urllib.request.urlopen(url + "?%s" % params) as res:
-        data = json.loads(res.read().decode('utf-8'))
-        return data['stars']
+    cur = dbh().cursor()
+    cur.execute('SELECT * FROM star WHERE keyword = %s', (keyword,))
+    return cur.fetchall()
+
+
+@app.route("/stars", methods=['POST'])
+def post_stars():
+    keyword = request.args.get('keyword', "")
+    if keyword == None or keyword == "":
+        keyword = request.form['keyword']
+
+    if keyword == '':
+        abort(400)
+
+    cur = dbh().cursor()
+    cur.execute('SELECT * FROM entry WHERE keyword = %s', (keyword,))
+    entry = cur.fetchone()
+    if entry == None:
+        abort(404)
+
+    user = request.args.get('user', "")
+    if user == None or user == "":
+        user = request.form['user']
+
+    cur.execute('INSERT INTO star (keyword, user_name, created_at) VALUES (%s, %s, NOW())', (keyword, user))
+
+    return jsonify(result = 'ok')
+
 
 def is_spam_contents(content):
     with urllib.request.urlopen(config('isupam_origin'), urllib.parse.urlencode({ "content": content }).encode('utf-8')) as res:
