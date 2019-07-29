@@ -11,7 +11,11 @@ import re
 import string
 import urllib
 
+import logging
 import newrelic.agent
+
+
+logging.basicConfig(filename='/tmp/isuda.log', level=logging.INFO)
 
 newrelic.agent.initialize('/home/isucon/webapp/python/newrelic.ini')
 
@@ -101,7 +105,7 @@ def get_index():
     page = int(request.args.get('page', '1'))
 
     cur = dbh().cursor()
-    cur.execute('SELECT description, keyword FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
+    cur.execute('SELECT id, description, rendered, keyword FROM entry ORDER BY updated_at DESC LIMIT %s OFFSET %s', (PER_PAGE, PER_PAGE * (page - 1),))
     entries = cur.fetchall()
 
     cur.execute('SELECT keyword FROM entry ORDER BY keyword_length DESC')
@@ -109,7 +113,12 @@ def get_index():
 
     stars_dict = load_stars_dict([e['keyword'] for e in entries])
     for entry in entries:
-        entry['html'] = htmlify(entry['description'], keywords)
+        if entry['rendered']:
+            entry['html'] = entry['rendered']
+        else:
+            entry['html'] = htmlify(entry['description'], keywords)
+            cur.execute('UPDATE entry SET rendered = %s WHERE id = %s', (entry['html'], entry['id']))
+
         entry['stars'] = stars_dict[entry['keyword']]
 
     cur.execute('SELECT COUNT(id) AS count FROM entry')
@@ -134,18 +143,21 @@ def create_keyword():
 
     user_id = request.user_id
     description = request.form['description']
+    rendered = htmlify(description)
 
     if is_spam_contents(description) or is_spam_contents(keyword):
         abort(400)
 
     cur = dbh().cursor()
+    cur.execute('UPDATE entry SET rendered = NULL WHERE description LIKE %s', ('%' + keyword + '%',))
+
     sql = """
-        INSERT INTO entry (author_id, keyword, description, created_at, updated_at)
-        VALUES (%s,%s,%s,NOW(), NOW())
+        INSERT INTO entry (author_id, keyword, description, rendered, created_at, updated_at)
+        VALUES (%s,%s,%s,%s,NOW(), NOW())
         ON DUPLICATE KEY UPDATE
-        author_id = %s, keyword = %s, description = %s, updated_at = NOW()
-"""
-    cur.execute(sql, (user_id, keyword, description, user_id, keyword, description))
+        author_id = %s, keyword = %s, description = %s, rendered = %s, updated_at = NOW()
+        """
+    cur.execute(sql, (user_id, keyword, description, rendered, user_id, keyword, description, rendered))
     return redirect('/')
 
 @app.route('/register')
@@ -202,12 +214,17 @@ def get_keyword(keyword):
         abort(400)
 
     cur = dbh().cursor()
-    cur.execute('SELECT description, keyword FROM entry WHERE keyword = %s LIMIT 1', (keyword,))
+    cur.execute('SELECT id, description, rendered, keyword FROM entry WHERE keyword = %s LIMIT 1', (keyword,))
     entry = cur.fetchone()
     if entry == None:
         abort(404)
 
-    entry['html'] = htmlify(entry['description'])
+    if entry['rendered']:
+        entry['html'] = entry['rendered']
+    else:
+        entry['html'] = htmlify(entry['description'])
+        cur.execute('UPDATE entry SET rendered = %s WHERE id = %s', (entry['html'], entry['id']))
+
     entry['stars'] = load_stars(entry['keyword'])
     return render_template('keyword.html', entry = entry)
 
@@ -225,6 +242,7 @@ def delete_keyword(keyword):
         abort(404)
 
     cur.execute('DELETE FROM entry WHERE keyword = %s', (keyword,))
+    cur.execute('UPDATE entry SET rendered = NULL WHERE description LIKE %s', ('%' + keyword + '%',))
 
     return redirect('/')
 
